@@ -36,6 +36,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <stdbool.h>
 
 #ifdef HAVE_SYS_XATTR_H
 #include <sys/xattr.h>
@@ -48,19 +49,35 @@
 //  have the mountpoint.  I'll save it away early on in main(), and then
 //  whenever I need a path for something I'll call this to construct
 //  it.
-static void bb_fullpath(char fpath[PATH_MAX], const char *path)
+static void bb_fullpath(char fpath[PATH_MAX], const char *path, bool is_write)
 {
     strcpy(fpath, BB_DATA->rootdir);
     strncat(fpath, path, PATH_MAX); // ridiculously long paths will
 				    // break here
 
-    log_msg("    bb_fullpath:  rootdir = \"%s\", path = \"%s\", fpath = \"%s\"\n",
+    log_msg("\nbb_fullpath:  rootdir = \"%s\", path = \"%s\", fpath = \"%s\"\n",
 	    BB_DATA->rootdir, path, fpath);
+	   
+	   
+    char search;
+    char replace;
+    
+    if (is_write)
+    {
+        search = ':';
+        replace = '-';      
+    }
+    else
+    {
+        search = '-';
+        replace = ':';
+    }
+    
 	    
     for (int i = 0; i < PATH_MAX; i++)
     {
-        if (fpath[i] == ':')
-                fpath[i] = '-';
+        if (fpath[i] == search)
+                fpath[i] = replace;
     }
 }
 
@@ -82,7 +99,7 @@ int bb_getattr(const char *path, struct stat *statbuf)
     
     log_msg("\nbb_getattr(path=\"%s\", statbuf=0x%08x)\n",
 	  path, statbuf);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, false);
 
     retstat = log_syscall("lstat", lstat(fpath, statbuf), 0);
     
@@ -110,7 +127,7 @@ int bb_readlink(const char *path, char *link, size_t size)
     
     log_msg("\nbb_readlink(path=\"%s\", link=\"%s\", size=%d)\n",
 	  path, link, size);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, false);
 
     retstat = log_syscall("readlink", readlink(fpath, link, size - 1), 0);
     if (retstat >= 0) {
@@ -135,7 +152,7 @@ int bb_mknod(const char *path, mode_t mode, dev_t dev)
     
     log_msg("\nbb_mknod(path=\"%s\", mode=0%3o, dev=%lld)\n",
 	  path, mode, dev);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, true);
     
     // On Linux this could just be 'mknod(path, mode, dev)' but this
     // tries to be be more portable by honoring the quote in the Linux
@@ -162,7 +179,7 @@ int bb_mkdir(const char *path, mode_t mode)
     
     log_msg("\nbb_mkdir(path=\"%s\", mode=0%3o)\n",
 	    path, mode);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, true);
 
     return log_syscall("mkdir", mkdir(fpath, mode), 0);
 }
@@ -174,7 +191,7 @@ int bb_unlink(const char *path)
     
     log_msg("bb_unlink(path=\"%s\")\n",
 	    path);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, true);
 
     return log_syscall("unlink", unlink(fpath), 0);
 }
@@ -186,7 +203,7 @@ int bb_rmdir(const char *path)
     
     log_msg("bb_rmdir(path=\"%s\")\n",
 	    path);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, true);
 
     return log_syscall("rmdir", rmdir(fpath), 0);
 }
@@ -202,7 +219,7 @@ int bb_symlink(const char *path, const char *link)
     
     log_msg("\nbb_symlink(path=\"%s\", link=\"%s\")\n",
 	    path, link);
-    bb_fullpath(flink, link);
+    bb_fullpath(flink, link, true);
 
     return log_syscall("symlink", symlink(path, flink), 0);
 }
@@ -216,8 +233,8 @@ int bb_rename(const char *path, const char *newpath)
     
     log_msg("\nbb_rename(fpath=\"%s\", newpath=\"%s\")\n",
 	    path, newpath);
-    bb_fullpath(fpath, path);
-    bb_fullpath(fnewpath, newpath);
+    bb_fullpath(fpath, path, true);
+    bb_fullpath(fnewpath, newpath, true);
 
     return log_syscall("rename", rename(fpath, fnewpath), 0);
 }
@@ -229,8 +246,8 @@ int bb_link(const char *path, const char *newpath)
     
     log_msg("\nbb_link(path=\"%s\", newpath=\"%s\")\n",
 	    path, newpath);
-    bb_fullpath(fpath, path);
-    bb_fullpath(fnewpath, newpath);
+    bb_fullpath(fpath, path, true);
+    bb_fullpath(fnewpath, newpath, true);
 
     return log_syscall("link", link(fpath, fnewpath), 0);
 }
@@ -242,7 +259,7 @@ int bb_chmod(const char *path, mode_t mode)
     
     log_msg("\nbb_chmod(fpath=\"%s\", mode=0%03o)\n",
 	    path, mode);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, true);
 
     return log_syscall("chmod", chmod(fpath, mode), 0);
 }
@@ -255,7 +272,7 @@ int bb_chown(const char *path, uid_t uid, gid_t gid)
     
     log_msg("\nbb_chown(path=\"%s\", uid=%d, gid=%d)\n",
 	    path, uid, gid);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, true);
 
     return log_syscall("chown", chown(fpath, uid, gid), 0);
 }
@@ -267,7 +284,7 @@ int bb_truncate(const char *path, off_t newsize)
     
     log_msg("\nbb_truncate(path=\"%s\", newsize=%lld)\n",
 	    path, newsize);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, true);
 
     return log_syscall("truncate", truncate(fpath, newsize), 0);
 }
@@ -280,7 +297,7 @@ int bb_utime(const char *path, struct utimbuf *ubuf)
     
     log_msg("\nbb_utime(path=\"%s\", ubuf=0x%08x)\n",
 	    path, ubuf);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, true);
 
     return log_syscall("utime", utime(fpath, ubuf), 0);
 }
@@ -303,7 +320,7 @@ int bb_open(const char *path, struct fuse_file_info *fi)
     
     log_msg("\nbb_open(path\"%s\", fi=0x%08x)\n",
 	    path, fi);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, false);
     
     // if the open call succeeds, my retstat is the file descriptor,
     // else it's -errno.  I'm making sure that in that case the saved
@@ -385,7 +402,7 @@ int bb_statfs(const char *path, struct statvfs *statv)
     
     log_msg("\nbb_statfs(path=\"%s\", statv=0x%08x)\n",
 	    path, statv);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, false);
     
     // get stats for underlying filesystem
     retstat = log_syscall("statvfs", statvfs(fpath, statv), 0);
@@ -490,7 +507,7 @@ int bb_setxattr(const char *path, const char *name, const char *value, size_t si
     
     log_msg("\nbb_setxattr(path=\"%s\", name=\"%s\", value=\"%s\", size=%d, flags=0x%08x)\n",
 	    path, name, value, size, flags);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, true);
 
     return log_syscall("lsetxattr", lsetxattr(fpath, name, value, size, flags), 0);
 }
@@ -503,7 +520,7 @@ int bb_getxattr(const char *path, const char *name, char *value, size_t size)
     
     log_msg("\nbb_getxattr(path = \"%s\", name = \"%s\", value = 0x%08x, size = %d)\n",
 	    path, name, value, size);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, false);
 
     retstat = log_syscall("lgetxattr", lgetxattr(fpath, name, value, size), 0);
     if (retstat >= 0)
@@ -522,7 +539,7 @@ int bb_listxattr(const char *path, char *list, size_t size)
     log_msg("\nbb_listxattr(path=\"%s\", list=0x%08x, size=%d)\n",
 	    path, list, size
 	    );
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, false);
 
     retstat = log_syscall("llistxattr", llistxattr(fpath, list, size), 0);
     if (retstat >= 0) {
@@ -544,7 +561,7 @@ int bb_removexattr(const char *path, const char *name)
     
     log_msg("\nbb_removexattr(path=\"%s\", name=\"%s\")\n",
 	    path, name);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, true);
 
     return log_syscall("lremovexattr", lremovexattr(fpath, name), 0);
 }
@@ -565,7 +582,7 @@ int bb_opendir(const char *path, struct fuse_file_info *fi)
     
     log_msg("\nbb_opendir(path=\"%s\", fi=0x%08x)\n",
 	  path, fi);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, false);
 
     // since opendir returns a pointer, takes some custom handling of
     // return status.
@@ -737,7 +754,7 @@ int bb_access(const char *path, int mask)
    
     log_msg("\nbb_access(path=\"%s\", mask=0%o)\n",
 	    path, mask);
-    bb_fullpath(fpath, path);
+    bb_fullpath(fpath, path, false);
     
     retstat = access(fpath, mask);
     
